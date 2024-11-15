@@ -4,6 +4,10 @@
     <button @click="addObject('wolf')">Add Lobo</button>
     <button @click="addObject('rabbit')">Add Coelho</button>
     <button @click="addObject('plant')">Add Planta</button>
+    <label>Parar quando faltar animal
+      <input v-model="STOP_WHEN_ZERO" type="checkbox">
+    </label>
+    
     <div id="container">
 
     </div>
@@ -133,7 +137,8 @@ ETAPA 9 - MELHORIA DO SPAWN
 /* ESTAPA X - IA? */
 let addObject;
 let restartGame;
-import {onMounted} from "vue";
+import {onMounted,ref} from "vue";
+const STOP_WHEN_ZERO = ref(true);
 onMounted(()=>{
 
 restartGame = ()=> window.location.reload();
@@ -313,7 +318,6 @@ const DECISION_LIST = {
 };
 
 const OBJECTS_SPAWN_COUNT = 100;
-const STOP_WHEN_ZERO = true;
 
 const plants = [];
 const rabbits = [];
@@ -368,7 +372,7 @@ function game(ctx) {
 
 function tick() {
 
-    if (STOP_WHEN_ZERO) {
+    if (STOP_WHEN_ZERO.value) {
         for (let type in objectsCount) {
             if (objectsCount[type] == 0) return;
         }
