@@ -7,10 +7,12 @@
     <label>Parar quando faltar animal
       <input v-model="STOP_WHEN_ZERO" type="checkbox">
     </label>
+    <button @click="playPause()" id="playPauseButton">Pause</button>
     
     <div id="container">
 
     </div>
+    {{ algo }}
   </div>
 </template>
 <script setup>
@@ -137,16 +139,21 @@ ETAPA 9 - MELHORIA DO SPAWN
 /* ESTAPA X - IA? */
 let addObject;
 let restartGame;
+let playPause;
 import {onMounted,ref} from "vue";
 const STOP_WHEN_ZERO = ref(true);
+
+const algo = ref('')
+
 onMounted(()=>{
+
+    algo.value = 'oi'
 
 restartGame = ()=> window.location.reload();
 
 // Tela
-console.log(document);
-console.log(window);
 const container = document.getElementById('container');
+const playPauseButton = document.getElementById('playPauseButton');
 
 // Canvas Game
 const canvas = document.createElement('canvas');
@@ -335,10 +342,14 @@ let countPlant = 0;
 let countRabbit = 0;
 let countWolf = 0;
 
+let gameTime=0;
+let tickTime=0;
+let tickDiff=0;
+
 let timer = 0;
 let init = 0;
 
-let tickTime=0
+let isRunning=false;
 
 const taxaQuadros = 60;
 
@@ -350,6 +361,18 @@ addObject=(type)=> createObject(canvas.width / 2, canvas.height / 2, Math.min(ca
 
 // O jogo
 newGame(ctx);
+
+playPause=()=> {
+    console.log(isRunning);
+    console.log(playPauseButton);
+    isRunning=!isRunning;
+
+    if (isRunning){
+        playPauseButton.textContent='Pause';
+    } else {
+        playPauseButton.textContent='Play';
+    }
+}
 
 /**
  * Responsável por inicializar um novo jogo
@@ -365,40 +388,55 @@ function newGame(ctx) {
  * @param {CanvasRenderingContext2D} ctx canvas
  */
 function game(ctx) {
+    updateTickTime();
     tick();
     render(ctx);
     requestAnimationFrame(() => { game(ctx) });
 }
 
+function updateTickTime(){
+
+    const tickNow=Date.now();
+
+    tickDiff=tickNow-tickTime;
+    tickTime=tickNow;
+}
+
+function updateGameTime(){ 
+    gameTime +=tickDiff;
+}
+
 function tick() {
+    
+    if (!isRunning){ return;}
+
+    updateGameTime();
+
+    objects.forEach((object) => {
+        tickObject(object);
+    });
 
     if (STOP_WHEN_ZERO.value) {
         for (let type in objectsCount) {
-            if (objectsCount[type] == 0) return;
+            if (objectsCount[type] == 0) isRunning=false;
         }
     }
+}
 
-    objects.forEach((object) => {
+function tickObject(object){
+    //TODO Tick object (update ->gain size, alter collor, kill, act)
+    updateObject(object);
 
-        //TODO Tick object (update ->gain size, alter collor, kill, act)
+    const outOfStamina = object.life.stamina <= 0;
+    const tooMuchOld = TYPES_OBJECT[object.type].life.lifeExpectation < object.life.age;
+    if (tooMuchOld || outOfStamina) {
+        if (outOfStamina) { objectsEnergyOut[object.type]++ };
+        if (tooMuchOld) { objectsDied[object.type]++ };
+        kill(object);
+    } else {
+        act(object);
         updateObject(object);
-
-        const outOfStamina = object.life.stamina <= 0;
-        const tooMuchOld = TYPES_OBJECT[object.type].life.lifeExpectation < object.life.age;
-        if (tooMuchOld || outOfStamina) {
-            if (outOfStamina) { objectsEnergyOut[object.type]++ };
-            if (tooMuchOld) { objectsDied[object.type]++ };
-            kill(object);
-        } else {
-            act(object);
-            updateObject(object);
-        }
-
-    });
-
-    timer = (Math.round((Date.now() - init) / 1000));
-    tickTime=Date.now();
-
+    }
 }
 
 // Cálculos e Física
@@ -522,8 +560,9 @@ function becomeOverlap(object1, object2) {
  */
 function initializeObjects(ctx) {
 
-    init = Date.now();
-    tickTime=init;
+    gameTime = 0;
+    tickTime=Date.now();
+    isRunning=true;
 
     for (let type in TYPES_OBJECT) {
         objectsBorn[type] = 0;
@@ -551,8 +590,8 @@ function initializeObjects(ctx) {
 
 function newObject(cordinateSpawnX, cordinateSpawnY, radiusSpawn, type, randomAge) {
 
-    let spawnTime = Date.now();
-    let lastReproduce = Date.now();
+    let spawnTime = gameTime;
+    let lastReproduce = gameTime;
     let canReproduce = false;
 
     if (randomAge) {
@@ -562,7 +601,7 @@ function newObject(cordinateSpawnX, cordinateSpawnY, radiusSpawn, type, randomAg
 
         const totalTimeToReproduce = TYPES_OBJECT[type].reprodution.daysToReproduce * 24000
         const timeSinceLastReproduce = Math.random() * totalTimeToReproduce
-        lastReproduce = Date.now() - timeSinceLastReproduce;
+        lastReproduce = gameTime - timeSinceLastReproduce;
 
     }
 
@@ -603,9 +642,7 @@ function newObject(cordinateSpawnX, cordinateSpawnY, radiusSpawn, type, randomAg
 }
 
 function updateAge(object) {
-
-    const now = Date.now();
-    const totalLifeTime = now - object.life.spawnTime;
+    const totalLifeTime = gameTime - object.life.spawnTime;
     const age = Math.trunc(totalLifeTime / 24000);
 
     object.life.age = age;
@@ -632,7 +669,7 @@ function updateCanReproduce(object) {
     }
 
     //Obtém os dados da última reproducao e calcula o período para a próxima
-    const now = Date.now();
+    const now = gameTime;
     const totalReprodutionGap = TYPES_OBJECT[object.type].reprodution.daysToReproduce * 24000;
     const nextReprodutionAvaliable = object.reprodution.lastReproduce + totalReprodutionGap;
 
@@ -660,13 +697,13 @@ function updateCanEat(object) {
 function updateObject(object) {
     updateAge(object);
     updateCanReproduce(object);
-    updateCanEat(object);  
+    updateCanEat(object); 
     updateVision(object); 
     updateStamina(object);
 }
 
 function updateStamina(object){
-    object.life.stamina-=TYPES_OBJECT[object.type].life.baseStaminaConsume*(Date.now()-tickTime)/1000;
+    object.life.stamina-=TYPES_OBJECT[object.type].life.baseStaminaConsume*(tickDiff)/1000;
 }
 
 
@@ -727,18 +764,18 @@ function renderStats(ctx) {
     ctx.textAlign = 'right';
     ctx.textBaseline = 'top';
     ctx.font = '32px Arial';
-    const horas = timer % 24;
-    const days = Math.trunc(timer / 24);
+    const horas = Math.trunc(gameTime/1000);
+    const days = Math.trunc(horas / 24);
     let displayTempo;
-    if (days > 0) { displayTempo = days + 'd' + horas + 'h'; } else { displayTempo = horas + 'h'; }
+    if (days > 0) { displayTempo = days + 'd' + horas%24 + 'h'; } else { displayTempo = horas%24 + 'h'; }
     ctx.fillText('Tempo: ' + displayTempo, canvas.width, 0);
     ctx.fillText('Plantas: ' + objectsCount.plant, canvas.width, 32);
     ctx.fillText('Lobos: ' + objectsCount.wolf, canvas.width, 64);
     ctx.fillText('Coelhos: ' + objectsCount.rabbit, canvas.width, 96);
-    ctx.fillText('Born (P/C/L): ' + objectsBorn.plant + '/' + objectsBorn.rabbit + '/' + objectsBorn.wolf, canvas.width, 128);
+    /*ctx.fillText('Born (P/C/L): ' + objectsBorn.plant + '/' + objectsBorn.rabbit + '/' + objectsBorn.wolf, canvas.width, 128);
     ctx.fillText('Eatted (P/C/L): ' + objectsEat.plant + '/' + objectsEat.rabbit + '/' + objectsEat.wolf, canvas.width, 160);
     ctx.fillText('Died (P/C/L): ' + objectsDied.plant + '/' + objectsDied.rabbit + '/' + objectsDied.wolf, canvas.width, 192);
-    ctx.fillText('EnergyOut (P/C/L): ' + objectsEnergyOut.plant + '/' + objectsEnergyOut.rabbit + '/' + objectsEnergyOut.wolf, canvas.width, 224);
+    ctx.fillText('EnergyOut (P/C/L): ' + objectsEnergyOut.plant + '/' + objectsEnergyOut.rabbit + '/' + objectsEnergyOut.wolf, canvas.width, 224);*/
 }
 
 function renderObjects() {
@@ -1057,11 +1094,11 @@ function reproduce(object) {
     }
 
     // Atualiza os dados de reprodução
-    object.reprodution.lastReproduce = Date.now();
+    object.reprodution.lastReproduce = gameTime;
     updateCanReproduce(object);
     if (!TYPES_OBJECT[object.type].reprodution.soloReprodution) {
         const secondaryObject = object.cache.lastCollision.object
-        secondaryObject.reprodution.lastReproduce = Date.now();
+        secondaryObject.reprodution.lastReproduce = gameTime;
         updateCanReproduce(secondaryObject);
     }
 
